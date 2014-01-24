@@ -1,0 +1,858 @@
+%% LyX 2.0.2 created this file.  For more info, see http://www.lyx.org/.
+%% Do not edit unless you really know what you are doing.
+\documentclass[english]{article}
+\usepackage[T1]{fontenc}
+\usepackage[latin9]{inputenc}
+\usepackage{listings}
+\usepackage{graphicx}
+\usepackage{esint}
+\usepackage{babel}
+\usepackage{fullpage}
+\usepackage{hyperref}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{subcaption}
+\usepackage{tikz}
+\usepackage{verbatim}
+
+%\theoremstyle{plain}% default
+\newtheorem{thm}{Theorem}[section]
+\newtheorem{lem}[thm]{Lemma}
+\providecommand*{\lemautorefname}{Lemma}
+\newtheorem{prop}[thm]{Proposition}
+\newtheorem{cor}[thm]{Corollary}
+%\theoremstyle{definition}
+\newtheorem{defn}{Definition}[section]
+\newtheorem{conj}{Conjecture}[section]
+\newtheorem{exmp}{Example}[section]
+%\theoremstyle{remark}
+\newtheorem{rem}{Remark}
+\newtheorem{note}{Note}
+\newtheorem{case}{Case}
+
+\usepackage[ruled]{algorithm2e}
+\renewcommand{\algorithmcfname}{ALGORITHM}
+\SetAlFnt{\small}
+\SetAlCapFnt{\small}
+\SetAlCapNameFnt{\small}
+
+
+\title{Edge Features for the Spectrogram}
+\author{Mark Stoehr}
+\date{\today}
+
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+
+\section{Introduction}
+
+We give a derivation of signal processing tools for extracting time-frequency
+ridges. Generally the ridges we think of being in a time-frequency
+display correspond either to the formants or the harmonics. In this
+work we are primarily interested in formants as they are most relevant
+for English language-speech recognition. An example sentence is in
+Figure \ref{fig-sa1}
+\begin{figure}
+\centering{}\includegraphics[scale=0.5]{filters/multitaper_hermite_sa1}\caption{``She had your dark suit in greasy wash water all year''\label{fig-sa1}}
+\end{figure}
+our goal is to extract the formants which correspond to the ridges
+in the spectrogram.
+
+\section{Edge Criteria}
+
+A signal processing tool used in \cite{amitobject,stoehrmasters} was to find maxima
+along the directional derivatives in eight cardinal directions (as in \autoref{fig:binary-edge-orientations}) corresponding to two polarities
+with four binary masks (as in \autoref{fig:binary-edge-masks}).
+\begin{figure}
+  \centering
+  \includegraphics[height=2in]{/home/mark/Template-Speech-Recognition/Papers/plots/binary_edges.png}
+  \caption{Eight binary edge masks}\label{fig:binary-edge-masks}
+ \end{figure}
+\begin{figure}
+  \centering
+  \includegraphics[width=3in]{/home/mark/Template-Speech-Recognition/Papers/plots/binary_edge_orientations.png}
+  \caption{Eight binary edge orientations}\label{fig:binary-edge-orientations}
+\end{figure}
+The directionary derivative maxima were computed with coarse local distance computations but we may interpret
+them as approximately computing time-frequency locations $(t,\omega)$ such that
+\begin{equation}\label{eq:directional-derivative-defn}
+g(t,\omega; v) =(\nabla \log |X(t,\omega)| )^\top v
+\end{equation}
+is greater than zero
+and attains a maximum along the direction $v\in\mathbb{R}^2$ where \begin{equation}\tan^{-1}(v(2)/v(1)) = k\pi/4\end{equation}
+where $k$ is an integer so that the angle of $v$ is an eighth root of unity. We may write these conditions as
+\begin{align}\label{align:edge-conditions1}
+g(t,\omega; v) &> 0\\
+\label{align:edge-conditions2}(\nabla g(t,\omega; v))\cdot v &= 0\\
+\label{align:edge-conditions3}\nabla ((\nabla g(t,\omega; v))\cdot v) \cdot v &< 0.
+\end{align}
+For the purposes of the following exposition we call $v$ the \textit{edge orientation}:
+\begin{defn}
+Let $S(t,f)$ be a signal over $(f,t)\subset \mathcal{F}\times \mathcal{T}$ then if $g(t,f; v)$ for $v\in\mathbb{R}^2$ is the directional
+derivatve signal defined similarly to \autoref{eq:directional-derivative-defn} and if at a location $(t,f)$ all the conditions
+\autoref{align:edge-conditions1},\autoref{align:edge-conditions2},
+and \autoref{align:edge-conditions3} are met then $(t,f)$ is
+said to have an edge of \textit{orientation} $v$.
+\end{def}
+Moreover, we note that if $\log |X(t,\omega)|$ has an edge of orientation $v$
+at location $(t,\omega)$ then $v$ is approximately perpendicular
+to the level curve of $\log |X|$
+in a neighborhood of $(t,\omega)$.
+
+
+
+\section{Partial Derivatives of the Spectrogram}
+
+In order to apply \autoref{align:edge-conditions1} to spectrogram we will introduce some notation: let
+$x(t)$ denote the speech signal and $X(t,\omega)$ denote its continuous short-time Fourier transform
+\begin{equation}\label{eq:continuous-FT}
+X(t,\omega) = \int x(\tau)h(t-\tau)e^{-i\omega \tau}\; d\tau
+\end{equation}
+where $h(t)$ is the windowing function for the short-time Fourier transform (usually it will be the
+Hermite window).  Since we are generally working on the spectrogram $|X(t,\omega)|$ it is useful to
+write the short-time Fourier transform in polar form where
+\begin{equation}
+X(t,\omega)= M(t,\omega)e^{i\phi(t,\omega)}
+\end{equation}
+where $M(t,\omega)=|X(t,\omega)|$.  In order to find locations $(t,\omega)$ that satisfy
+the conditions in \autoref{align:edge-conditions1},\autoref{align:edge-conditions2},\autoref{align:edge-conditions3}
+we need to compute the function $g(t,\omega ; v)$ which may be written
+\begin{equation}
+g(t,\omega ; v) = \frac{\partial X(t,\omega)}{\partial t} v(0) + \frac{\partial X(t,\omega)}{\partial \omega} v(1)
+\end{equation} which means that we need to compute
+the partial derivatives of the spectrogram. We may compute the partial derivatives using techniques
+covered in  \cite{fitzfulop2009}
+\begin{align*}
+\frac{\partial}{\partial t} X(t,\omega) =& \frac{\partial}{\partial t} M(t,\omega) e^{i\phi(t,\omega)}\\
+=& \frac{\partial M(t,\omega) }{\partial t} e^{i\phi(t,\omega)} + M(t,\omega)\cdot i \frac{\partial \phi(t,\omega) }{\partial t} e^{i\phi(t,\omega)}\\
+=& \frac{\partial M(t,\omega) }{\partial t} e^{i\phi(t,\omega)} +  i \frac{\partial \phi(t,\omega) }{\partial t} X(t,\omega)
+\end{align*}
+which means that if $X^*(t,\omega)$ is the complex conjugate of $X(t,\omega)$ then
+\begin{equation}
+\frac{\partial}{\partial t} X(t,\omega) \cdot \frac{X^*(t,\omega)}{|X(t,\omega)|^2} = \frac{\partial M(t,\omega) }{\partial t}  \frac{1}{M(t,\omega)} +  i \frac{\partial \phi(t,\omega) }{\partial t}
+\end{equation}
+so that
+\begin{equation}
+\operatorname{Re}\left(\frac{\partial}{\partial t} X(t,\omega) \cdot \frac{X^*(t,\omega)}{|X(t,\omega)|^2}\right) = \frac{\partial M(t,\omega) }{\partial t}  \frac{1}{M(t,\omega)} = \frac{\partial \log |X(t,\omega)| }{\partial t}
+\end{equation}
+and using a similar argument we can show that
+\begin{equation}\label{eq:realpartfreqderivative}
+\operatorname{Re}\left(\frac{\partial}{\partial \omega} X(t,\omega) \cdot \frac{X^*(t,\omega)}{|X(t,\omega)|^2}\right) = \frac{\partial M(t,\omega) }{\partial \omega }  \frac{1}{M(t,\omega)} = \frac{\partial \log |X(t,\omega)| }{\partial \omega}
+\end{equation}
+so that we have
+\begin{align}
+g(t,\omega ; v) =& \operatorname{Re}\left(\nabla X(t,\omega) \cdot \frac{X^*(t,\omega)}{|X(t,\omega)|^2}\right) \cdot v\\
+=& v(0)\operatorname{Re}\left(\frac{\partial X(t,\omega)}{\partial t} \cdot \frac{X^*(t,\omega)}{|X(t,\omega)|^2}\right)\cdots\\
+& + v(1)\operatorname{Re}\left(\frac{\partial X(t,\omega)}{\partial \omega} \cdot \frac{X^*(t,\omega)}{|X(t,\omega)|^2}\right)
+\end{align}
+where $v=(v(0),v(1))^\top$. To compute the value of $g(t,\omega ; v)$ then we need to be able to compute the partial
+derivatives of the short-time Fourier transform $X(t,\omega; h)$ (so that $h$ is the window of the transform)
+\begin{align}
+\frac{\partial}{\partial t} X(t,\omega; h) =& \frac{\partial}{\partial t} \int x(\tau) h(t-\tau) e^{-2\pi i \omega \tau}\; d\tau\\
+=& \int x(\tau) h'(t-\tau) e^{-2\pi i \omega \tau}\; d\tau\\
+\label{eq:dXdt}=& X(t,\omega ; \mathcal{D}h)
+\end{align}
+where $\mathcal{D}h(t)$ is simply the derivative window $h'(t)$ of the original window $h(t)$.  The derivative of $X(t,\omega ; h)$
+with respect to frequency is
+\begin{align}
+\frac{\partial}{\partial \omega} X(t,\omega; h) =& \frac{\partial}{\partial \omega} \int x(\tau) h(t-\tau) e^{-2\pi i \omega \tau}\; d\tau\\
+=& - 2\pi i \int x(\tau) \tau h(t-\tau) e^{-2\pi i \omega \tau}\; d\tau\\
+=& -2 \pi itX(t,\omega ; h) + 2\pi itX(t,\omega ; h) - 2\pi i \int x(\tau) \tau h(t-\tau) e^{-2\pi i \omega \tau}\; d\tau\\
+=&  -2 \pi itX(t,\omega ; h) + 2\pi i\int x(\tau)(t- \tau) h(t-\tau) e^{-2\pi i \omega \tau}\; d\tau\\
+\label{eq:dXdw}=& 2\pi i ( X(t,\omega ; \mathcal{T}h) - tX(t,\omega ; h))
+\end{align}
+where $\mathcal{T}h(t) = t\cdot h(t)$ for $-\infty<t<\infty$.  Combining \autoref{eq:dXdt} with \autoref{eq:realpartfreqderivative}
+to get 
+\begin{equation}
+\frac{\partial \log |X(t,\omega;\; h)|}{\partial t} = \operatorname{Re}\left(\frac{X(t,\omega ;\; \mathcal{D}h) X^*(t,\omega;\; h)}{|X(t,\omega;\; h)|^2}\right)
+\end{equation}
+and then by a similar argument we have
+\begin{equation}\label{eq:frequency-edges-fast-form}
+\frac{\partial \log |X(t,\omega;\; h)|}{\partial \omega} = -2\pi\operatorname{Im}\left(\frac{X(t,\omega ;\; \mathcal{T}h) X^*(t,\omega;\; h)}{|X(t,\omega;\; h)|^2}\right).
+\end{equation}
+
+\subsection{Empirical Plots of the magnitude derivatives}
+
+We can look at some plots of these raw gradients in \autoref{fig:2HTS-256WS-dlogMdt-unsmoothed} and \autoref{fig:2HTS-256WS-dlogMdw-unsmoothed}
+\begin{figure}
+\centering
+\includegraphics[scale=0.5]{exp/spectrogram_edges/plots/spectrogram_fcjf0sa1_edges_2HTS_256WS_dlogMdt.png}
+\caption{Hermite window $\frac{\partial}{\partial t}\log M(t,\omega)$}
+\label{fig:2HTS-256WS-dlogMdt-unsmoothed}
+\end{figure}
+\begin{figure}
+\centering
+\includegraphics[scale=0.5]{exp/spectrogram_edges/plots/spectrogram_fcjf0sa1_edges_2HTS_256WS_dlogMdw.png}
+\caption{Hermite window $\frac{\partial}{\partial \omega}\log M(t,\omega)$}
+\label{fig:2HTS-256WS-dlogMdw-unsmoothed}
+\end{figure}
+both of which are quite noisy we find that they are not very useful
+for computing anything like the edges we normally use.
+
+
+\section{Comparison of edges on different windows}
+
+We provide a few comparisons of edges learned on two different windows
+
+
+
+\section{Phase-Based Extraction}
+
+The proposed method is based on the phase representation of speech
+as in Figure \ref{fig-sa1-phase} 
+\begin{figure}
+\centering{}\includegraphics[scale=0.5]{filters/phase_multitaper_hermite_sa1}\caption{``She had your dark suit in greasy wash water all year''\label{fig-sa1-phase}}
+\end{figure}
+which is the same utterance as depicted in Figure \ref{fig-sa1}.
+We will follow the presentation given in \cite{fitzfulop2009}. The
+phase and magniutde are based on the discrete short-time Fourier transform
+\begin{eqnarray*}
+X(t,f;h) & = & \sum_{n=t}^{t+N-1}x(n)h(n-t)e^{-\frac{2\pi fn}{N}j}\\
+ & = & e^{-\frac{2\pi ft}{N}j}\sum_{n=0}^{N-1}x(t+n)h(n)e^{-\frac{2\pi fn}{N}j}\\
+ & = & e^{-\frac{2\pi ft}{N}}\hat{x}_{t}(k;h)
+\end{eqnarray*}
+so that the vector
+\[
+\left[\begin{array}{c}
+\hat{x}_{t}(0;h)\\
+\hat{x}_{t}(1;h)\\
+\vdots\\
+\hat{x}_{t}(N-1;h)
+\end{array}\right]
+\]
+may be computed as the $N$-point fast Fourier transform of the digital
+signal $x(t),x(t+1),\ldots,x(t+N-1)$ weighted by the window $h$.
+Since $X(t,f)$ is a complex number we may write it as $M(t,f)e^{\phi(t,f)j}$
+where $M(t,f)\geq0$ is the magnitude and $\phi(t,f)\in[0,2\pi)$
+is the phase. By the definition of the complex logarithm
+\[
+\log X(t,f)=\log M(t,f)+\phi(t,f)j
+\]
+and the spectrogram in Figure \ref{fig-sa1} corresponds to $\log M(t,f)$
+and Figure \ref{fig-sa1-phase} corresponds to $\phi(t,f)$ so they
+are the real and complex parts respectively of $\log X(t,f)$. Figure
+\ref{fig-sa1-phase} is difficult to interpret however its partial
+derivative with respect to time contains important information about
+the frequency information. Intuitively the phase of a pure tone should
+change according to the frequency of that tone so an isolated tone
+in a spectrogram should have nearly constant phase time derivative.
+As shown in \cite{fitzfulop2009} we can compute the derivative as
+\[
+\frac{\partial\phi(t,f)}{\partial t}=\operatorname{Im}\left\{ \frac{X(t,f;h')X^{*}(t,f;h)}{|X(t,f;h)|^{2}}\right\} 
+\]
+where $h'(t)$ is the derivative of $h(t)$. We use the Hermite window
+which has closed form expressions for all derivatives \cite{xiaoflandrin}
+and a multitaper estimate so that we use windows $h_{0}(t),h_{1}(t),\ldots,h_{K-1}(t)$
+and
+\[
+M(t,f;h,K)=\frac{1}{K}\sum_{k=0}^{K-1}M(t,f;h_{k}).
+\]
+ They also use a multitaper phase derivative estimate so that
+\begin{equation}
+\frac{\partial\phi(t,f;h_{k})}{\partial t}=\operatorname{Im}\left\{ \frac{X(t,f;\mathcal{D}h_{k})X^{*}(t,f;h_{k})}{|X(t,f;h_{k})|^{2}}\right\} \label{eq:dphi_dt}
+\end{equation}
+and
+\[
+\frac{\partial\phi(t,f;h,K)}{\partial t}=\frac{1}{K}\sum_{k=0}^{K-1}\frac{\partial\phi(t,f;h_{k})}{\partial t}.
+\]
+Multitaper estimates of the magnitude can significantly reduce the
+variance without introducing much bias as long as the different tapers
+are orthogonal \cite{percivalwalden93}. The time derivative 
+\begin{figure}
+\begin{centering}
+\label{fig-sa1_dphi_dt}\includegraphics[scale=0.5]{filters/multitaper_hermite_dphi_dt_sa1}
+\par\end{centering}
+
+\caption{Phase partial derivative with respect to time plot}
+\end{figure}
+ can be seen in \autoref{fig-sa1_dphi_dt} which clear shows the
+formnt contours apparent in \autoref{fig-sa1}. The derivative
+of the phase with respect to frequency indicates information about
+impulsive noise, however the information is not as clear as in this
+picture. We note that 
+\[
+\frac{\partial\phi(t,f;h,K)}{\partial t}
+\]
+actually measures the phase derivative $\hat{x}_{t}(k)$ minus $\frac{2\pi k}{N}$
+due to the definition of our short-time Fourier transform used above:
+thus it measures the change in the phase. 
+
+In \autoref{fig-sa1_dphi_dt} there are very sharp edges following
+the formant contours. We can see this by filtering the display
+\[
+\frac{\partial\phi(t,f;h,K)}{\partial t}
+\]
+and computing a smoothed mixed derivative
+\[
+\frac{\partial^{2}\phi(t,f;h,K)}{\partial t\partial f}*g(t,f;\sigma)
+\]
+which may be computed using a formula similar to \autoref{eq:dphi_dt}
+and convolving it with a Gaussian kernel, however that does not lead
+to clean results. Instead, we use 
+\begin{equation}\label{eq:phase-peak-phi}
+\Phi(t,f;h,K,\sigma)=\frac{\partial\phi(t,f;h,K)}{\partial t}*\frac{\partial g(t,f;\sigma)}{\partial f}
+\end{equation}
+which is equivalent, theoretically. We obtain Figure \ref{fig-sa1_d2phi_dtdw_gauss}
+by thresholding the values of $\Phi(t,f;h,K,\sigma)$.
+\begin{figure}
+\begin{centering}
+\label{fig-sa1_d2phi_dtdw_gauss}\includegraphics[scale=0.5]{filters/multitaper_hermite_dphi_dt_thresh_diff_sa1}
+\par\end{centering}
+
+\caption{Gaussian difference applied to the phase partial derivative with respect
+time}
+\end{figure}
+The values computed in Figure \ref{fig-sa1_d2phi_dtdw_gauss} track
+the formants quite well as can be seen in 
+\begin{figure}
+\begin{centering}
+\label{fig:sa1_d2phi_dtdw_gauss_overlay}\includegraphics[scale=0.5]{filters/multitaper_hermite_d2phi_dtdw_thresh_diff_overlayed_sa1}
+\par\end{centering}
+
+\caption{Gaussian difference applied to the phase partial derivative with respect
+time layed on the spectrogram}
+\end{figure}
+ Figure \ref{fig:sa1_d2phi_dtdw_gauss_overlay}. We note that the
+these frequency values depend only on the phase of the spectrogram
+and not on the magnitude. One point to notice about the definition
+given is that these points are found purely through the phase, however,
+they naturally correspond to the high-energy regions of the spectrogram.
+Thus, these curves may provide a natural normalization method.
+
+\subsection{Spectral-Peak Finding}
+\label{sec:spectral-peak-finding}
+The figure in 
+\autoref{fig:sa1_d2phi_dtdw_gauss_overlay} is computed by creating a binary spectral-peak map:
+\begin{equation}
+Y(t,f; \tau) =\begin{cases}
+1 & \Phi(t,f;h,K,\sigma) > \tau\\
+0 & \text{otherwise}
+\end{cases}
+\end{equation}
+where $\Phi(t,f;h,K,\sigma)$ is computed by \autoref{eq:phase-peak-phi}.  We see that $Y(t,f)$ 
+appears to track the formants but the output is not very useful since it 
+gives a cluster of outputs around a spectral peak.  To get a single estimate we use a mean-shift-style
+algorithm: \autoref{alg:mean-shift-peak} to cluster the peaks.
+\begin{algorithm}[t]
+\SetAlgoNoLine
+\KwIn{Binary Phase Features $Y\in\{0,1\}^{T\times F}$, bandwidth parameter $\sigma > 0$, quantization factor $k\in\mathbb{Z}_+$, 
+tolerance $\epsilon$ }
+\KwOut{Clustered Peak Map $Z\in\{0,1\}^{T\times F}$}
+  $U\in [T]\times [F]\leftarrow $ non-zero indices of $Y$\;
+\For{$t=1,2,\ldots,T$}{
+  $X \leftarrow \frac{1}{K}\begin{bmatrix} 1 & 2 & \cdots & kF\end{bmatrix}^\top$\;
+  NotConverged $\leftarrow$ True\;
+  \While{ NotConverged }{
+    \For{$i=1,2,\ldots,kF$}{
+      $D(i) = \frac{\sum_{u\in U}u(1)\exp\left\{-\frac{1}{2\sigma^2}\left[(u(0)-t)^2+(u(1)-X(i))^2\right]\right\}}{\sum_{u\in U}\exp\left\{-\frac{1}{2\sigma^2}\left[(u(0)-t)^2+(u(1)-X(i))^2\right]\right\}}$\;
+      }
+    NotConverged $\leftarrow \|X-D\| >\epsilon$\;
+    $X\leftarrow D$\;
+  }
+  $X\leftarrow \newoperatorname{ceil}(X)$ \;
+  $Z(t,X)\leftarrow 1$\;
+}
+
+\caption{Cluster Spectral Peak Map}
+\label{alg:mean-shift-peak}
+\end{algorithm}
+some typical plots of the clustered output are pictured
+\begin{figure}
+\begin{subfigure}
+\includegraphics[scale=0.75]{exp/binary_phase_meanshift/plots/mean_shift_binary_phase_peaks_train_dr7_mclk0_sa2_0.png}
+\end{subfigure}
+~
+\begin{subfigure}
+\includegraphics[scale=0.75]{exp/binary_phase_meanshift/plots/mean_shift_binary_phase_peaks_fcjf0_sa1_0.png}
+\end{subfigure}
+
+~
+\begin{subfigure}
+\includegraphics[scale=0.75]{exp/binary_phase_meanshift/plots/mean_shift_binary_phase_peaks_train_dr6_mdrd0_sx302_0.png}
+\end{subfigure}
+
+\caption{Clustered Phase Peak Output}
+\label{fig:clustered-phase-peaks}
+\end{figure}
+in \autoref{fig:clustered-phase-peaks}.
+
+\section{Reassignment Vector Field Clustering}
+
+In analogy to \autoref{sec:spectral-peak-finding} we wish to produce a clustering based
+on reassignment operators on the spectrogram.  A reassignment operator is a function
+that takes a non-negative time-frequency representation $W$, a pair of coordinates $(t,f)$, and maps them to a new
+set of coordinates $(t',f')$.  A common choice is to use a Wigner-Ville distribution $W$  One of the ways of formulating the reassignment
+operators is as
+\begin{equation}
+
+\end{equation}
+
+\section{Joint Phase and Magnitude Binary Features}
+
+The normalization method is covered in the file 
+\begin{lstlisting}
+filters/ridge_computations.py
+\end{lstlisting}
+which has the code to reproduce the figures contained in this section.
+
+We use the standard scale-space derivation but apply it to spectrograms
+namely we wish to compute
+
+\[
+f_{w}(t,w;\sigma)=\frac{\partial}{\partial w}(g(t,w;\sigma)*\log X(t,w))
+\]
+where $\log$ denotes the complex logarithm and $g(t,w;\sigma)$ is
+a normalized Gaussian at scale $\sigma$. We then get
+\begin{eqnarray*}
+f_{w}(t,w;\sigma) & = & \int dg_{w}(t-\tau,w-\omega;\sigma)\log|X(\tau,\omega)|d\tau d\omega\\
+ &  & +j\int dg_{w}(t-\tau,w-\omega;\sigma)\phi(\tau,\omega)d\tau d\omega
+\end{eqnarray*}
+where we have used the fact that for $X(t,w)\neq0$ 
+\begin{eqnarray*}
+\log X(t,w) & = & \log|X(t,w)|e^{j\phi(t,w)}\\
+ & = & \log|X(t,w)|+j\phi(t,w)
+\end{eqnarray*}
+and we let $dg_{w}=\frac{\partial}{\partial w}g$. We note that $f_{w}$
+is the sum of two convolutions:
+\begin{eqnarray*}
+(dg_{w}*\log|X|)(t,w) & = & g_{w}(t,w;\sigma)*\frac{1}{|X(t,w)|}\frac{\partial}{\partial w}|X(t,w)|\\
+ &  & \int g_{w}(t-\tau,w-\omega;\sigma)\frac{1}{|X(\tau,\omega)|}\frac{\partial}{\partial w}|X(\tau,\omega)|d\tau d\omega
+\end{eqnarray*}
+We are interested in
+\[
+\left(g*\frac{X_{th}X^{*}}{XX^{*}}\right)(t,w)=
+\]
+
+\section{Phase-guided Part Extraction}
+
+We now combine the edge learning algorithms with the binary
+phase feature algorithms to get a better collection of object
+parts.  In the normal part-learning approach we get parts
+that may not correspond to the significant features within
+the spectrogram.  We extract axoids whose centerline has a
+constant binary phase feature activation.
+
+The patches have a length $L$ and a frequency span $\Omega$.
+We will keep those all the same.
+
+
+\section{Designed Formant Parts}
+
+In order to assist in detection we consider parts that are specifically designed to capture
+formant structures. To do this we consider a large number of the formant style parts.
+We start with analyzing binary feature transforms of the features for the utterance considered
+in the previous section.
+
+The contributions in this section:
+\begin{enumerate}
+\item Visual analysis of spectrograms showing binary features overlayed
+\item A visual template for the structure of formant parts
+\item A formant part dictionary that parametrically involves rotation
+\end{enumerate}
+
+
+To do this we first consider the binary features overlayed the spectrogram for each of the eight
+types of edge features so that we get plots comparable to the binary phase features. First we consider the eight edge orientations from \autoref{fig:binary-edge-masks} and \autoref{fig:binary-edge-orientations}
+which correspond to directions in the rows of
+\begin{equation}
+V = \begin{bmatrix} \phantom{-}1 & \phantom{-}0 \\
+-1 & \phantom{-}0\\
+\phantom{-}0 & \phantom{-}1 \\
+\phantom{-}0 & -1\\
+\phantom{-}1 & \phantom{-}1\\
+-1 & -1\\
+ \phantom{-}1 & -1\\
+ -1 & \phantom{-}1.
+\end{bmatrix}
+\end{equation}
+We can then see these eight orientations overlayed on
+the spectrogram in \autoref{fig:spectrogram-overlayed-edges}
+
+\begin{figure}
+\label{fig:spectrogram-overlayed-edges}
+\centering
+\begin{subfigure}
+    \centering
+    \includegraphics[scale=0.75]{plots/binary_features_on_spectrogram_fcjf0sa1_edges_0.png}
+    \caption{$(1,0)$ edges}
+    \label{fig:overlayed_edges-0}
+    \end{subfigure} 
+~
+\begin{subfigure}
+    \centering
+    \includegraphics[scale=0.75]{plots/binary_features_on_spectrogram_fcjf0sa1_edges_1.png}
+    \caption{$(-1,0)$ edges}
+    \label{fig:overlayed_edges-1}
+    \end{subfigure} 
+~
+\begin{subfigure}
+    \centering
+    \includegraphics[scale=0.75]{plots/binary_features_on_spectrogram_fcjf0sa1_edges_2.png}
+    \caption{$(0,1)$ edges}
+    \label{fig:overlayed_edges-2}
+    \end{subfigure} 
+~
+\begin{subfigure}
+    \centering
+    \includegraphics[scale=0.75]{plots/binary_features_on_spectrogram_fcjf0sa1_edges_3.png}
+    \caption{$(-1,0)$ edges}
+    \label{fig:overlayed_edges-3}
+    \end{subfigure} 
+~
+    \caption{The tuple $(t,f)$ indicates the coordinates of the edge
+orientation vector in time-freqeuncy coordinates with time $t$ and frequency $f$}
+\end{figure}
+
+\begin{figure}
+\centering
+\begin{subfigure}
+    \centering
+    \includegraphics[scale=0.75]{plots/binary_features_on_spectrogram_fcjf0sa1_edges_4.png}
+    \caption{$(1,1)$ edges}
+    \label{fig:overlayed_edges-4}
+    \end{subfigure} 
+~
+\begin{subfigure}
+    \centering
+    \includegraphics[scale=0.75]{plots/binary_features_on_spectrogram_fcjf0sa1_edges_5.png}
+    \caption{$(-1,-1)$ edges}
+    \label{fig:overlayed_edges-5}
+    \end{subfigure} 
+~
+\begin{subfigure}
+    \centering
+    \includegraphics[scale=0.75]{plots/binary_features_on_spectrogram_fcjf0sa1_edges_6.png}
+    \caption{$(1,-1)$ edges}
+    \label{fig:overlayed_edges-6}
+    \end{subfigure} 
+~
+\begin{subfigure}
+    \centering
+    \includegraphics[scale=0.75]{plots/binary_features_on_spectrogram_fcjf0sa1_edges_7.png}
+    \caption{$(-1,1)$ edges}
+    \label{fig:overlayed_edges-7}
+    \end{subfigure} 
+\caption{The tuple $(t,f)$ indicates the coordinates of the edge
+orientation vector in time-freqeuncy coordinates with time $t$ and frequency $f$}
+\end{figure}
+
+We begin with a model of ridges over spectrograms as piecewise
+linear curves so that we may write a ridge as a sequence of joints
+ (or knots to use spline terminology) 
+\begin{equation}\label{eq:formant-spline-knots}
+(t_0,f_0),(t_1,f_1),\ldots,(t_K,f_K)
+\end{equation}
+where $t_0 <t_1<\cdots <t_K$, $(t_0,f_0)$ is the starting time-frequency location, and
+$(t_K,f_K)$ is the ending time-frequency location.  The piecewise-linear
+assumption is that the ridge is well-approximately by a piecewise-linear curve
+formed from the $K$ line segments $\{((t_{k-1},f_{k-1}),(t_k,f_k))\}_{k=1}^K$.  In order to build these models then we have to 
+\begin{enumerate}
+\item construct a model for the individual segments
+\item build a model for piecing them together.
+\end{enumerate} 
+For the first task we consider the use of axoids as discussed
+in \cite{arias2005near} which are parallelograms with one axis
+vertical or horizontal.  Since we wish to chain these across time
+we use axoids with one axis parallel to the frequency axis and the
+time-axis is allowed have some angle $\theta$ between it
+and the true time axis.  A positive $\theta$ indicates a rising formant
+and a negative $\theta$ indicates a falling formant under this
+model.  Although \cite{arias2005near} used axoids to detect
+Gaussian signals in Gaussian noise we are concerned with detecting
+objects by using a variety of binary features whose detection
+provides evidence for the existence of a ridge. Thus, we formulate
+our axoids as a product of Bernoullis model over a small patch
+of the binary edge map produced from a spectrogram.
+To piece these different axoids together we opt to use algorithms
+similar to those considered in \cite{candes2006detecting},
+however we also use explicit probability constraints.
+
+\subsection{Segment Axoids}
+
+The axoid that sits over a formant should have its centerline
+approximately align with the center of the formant so that on
+the spectrogram the centerline of the axoid will have large values
+and small values towards the edge.  Let us formalize this
+intuition to make it precise.  A formant under the model for
+the previous section is segments joint at a sequence of knots
+as in \autoref{eq:formant-spline-knots}.  So the centerline
+of an axoid associated with $((t_{k-1},f_{k-1}),(t_k,f_k))$
+and denote this axoid by $A$.  We call $((t_{k-1},f_{k-1}),(t_k,f_k))$
+the \textit{central axis} of $A$ since it denotes the line along
+which we hypothesize the formant runs.  The set of points in the
+centerline $C(A)$ may be written
+\begin{equation}\label{eq:centerline-axoid-def}
+C(A) = \left\{ \begin{bmatrix}(1-\lambda) t_{k-1} + \lambda t_k\\ 
+(1-\lambda) f_{k-1} + \lambda f_k\end{bmatrix}\mid 0\leq \lambda\leq 1\right\}.
+\end{equation}
+For every $t$ such that $t_{k-1}\leq t\leq t_{k}$ there is a unique $f$
+such that $(t,f)$ is on $C(A)$. Let 
+\begin{equation}
+\lambda = \frac{t-t_{k-1}}{t_k-t_{k-1}}\in [0,1]
+\end{equation}
+since $t_{k-1}\leq t\leq t_k$ which means that
+$(1-\lambda )f_{k-1} + \lambda f_k$ is in $[f_{k-1},f_k]$
+and clearly 
+\begin{equation}
+(t,(1-\lambda )f_{k-1} + \lambda f_k) \in C(A)
+\end{equation}
+so we can define this as the $f$.  Any other $f'\neq f$
+would be such that $(1-\lambda)f_{k-1}+\lambda f_k\neq f'$ thus 
+meaning $(t,f)\not\in C(A)$.
+
+We say that a point lies $(t,f)$ lies above the centerline if
+\begin{equation}
+f > (1-\lambda )f_{k-1} + \lambda f_k
+\end{equation}
+where
+\begin{equation}
+\lambda = \frac{t-t_{k-1}}{t_k-t_{k-1}}
+\end{equation}
+and we say that it lies below the centerline if
+\begin{equation}
+f < (1-\lambda )f_{k-1} + \lambda f_k.
+\end{equation}
+Axoid $A$ is said to have frequency span $\Omega$ and centerline
+$((t_{k-1},f_{k-1}),(t_k,f_k))$ if
+\begin{equation}\label{eq:axoid-set-definition}
+A = \{ (t,f)\mid t_{k-1}\leq t\leq t_k,\; -\Omega/2\leq f - f_{k-1} - \frac{t-t_{k-1}}{t_k-t_{k-1}}(f_k-f_{k-1})\leq \Omega/2\}
+\end{equation}
+and this can be visualized in Figure~\ref{fig:axoid-basic-picture}.
+\begin{figure}
+\centering
+\begin{tikzpicture}[scale=1.5]
+    % Draw axes
+    \draw [<->,thick] (0,3) node (yaxis) [above] {$y$}
+        |- (5,0) node (xaxis) [right] {$x$};
+    % Draw two intersecting lines
+    \draw[dashed] (1,1.5) coordinate (a_1) -- (4,2) coordinate (a_2);
+    \node [above, rotate=9.4623222] at (2.5,1.75) {$C(A)$};
+
+    
+
+    \draw (1,.75) coordinate (b_1) -- (1,2.25) coordinate (b_2);
+    \draw (1,.75) coordinate (b_1) -- (4,1.25) coordinate (b_4);
+    \draw (1,2.25) coordinate (b_2) -- (4,2.75) coordinate (b_3);
+    \draw (4,2.75) coordinate (b_3) -- (4,1.25) coordinate (b_4);
+
+    \node [left] at (0,.75) {$f_{k-1}-\frac{\Omega}{2}$};
+    \draw[fill] (0,.75) circle [radius=0.025];
+    \node [left] at (0,2.25) {$f_{k-1}+\frac{\Omega}{2}$};
+    \draw[fill] (0,2.25) circle [radius=0.025];
+    \node [left] at (0,1.5) {$f_{k-1}$};
+    \draw[fill] (0,1.5) circle [radius=0.025];
+    \node [below] at (1,0) {$t_{k-1}$};
+    \draw[fill] (1,0) circle [radius=0.025];
+    \node [below] at (4,0) {$t_k$};
+    \draw[fill] (4,0) circle [radius=0.025];
+    %% \draw (0,1.5) coordinate (b_1) -- (2.5,0) coordinate (b_2);
+    %% % Calculate the intersection of the lines a_1 -- a_2 and b_1 -- b_2
+    %% % and store the coordinate in c.
+    %% \coordinate (c) at (intersection of a_1--a_2 and b_1--b_2);
+    %% % Draw lines indicating intersection with y and x axis. Here we use
+    %% % the perpendicular coordinate system
+    %% \draw[dashed] (yaxis |- c) node[left] {$y'$}
+    %%     -| (xaxis -| c) node[below] {$x'$};
+    %% % Draw a dot to indicate intersection point
+    %% \fill[red] (c) circle (2pt);
+\end{tikzpicture}
+\caption{Axoid over $((t_{k-1},f_{k-1}),(t_k,f_k))$ with frequency span $\Omega$}
+\label{fig:axoid-basic-picture}
+
+\end{figure}
+
+Given that the axoid is supposed to sit over a ridge we expect
+to find edges that are oriented towards the centerline. For a given
+point $(t,f)\in A$ define a function $\theta(t,f)\in [0,2\pi)$ which
+is the direction of the closest point in $C(A)$ from $(t,f)$.  We
+let this quantity be $0$ if $(t,f)\in C(A)$. If
+$(t,f)$ is above centerline $C(A)=((t_{k-1},f_{k-1}),(t_k,f_k))$
+then the angle directly pointing towards the centerline is
+\begin{equation}\label{eq:theta-above}
+\theta(t,f) = \tan^{-1}\frac{f_k-f_{k-1}}{t_k-t_{k-1}} -\frac{\pi}{2} \mod 2\pi
+\end{equation}
+and if $(t,f)\in A$ is below then the angle is 
+\begin{equation}\label{eq:theta-below}
+\theta(t,f) = \tan^{-1} \frac{f_k-f_{k-1}}{t_k-t_{k-1}} + \frac{\pi}{2} \mod 2\pi
+\end{equation}
+and the proof of these statements is from simple geometry.  
+Combining \autoref{eq:theta-above}, \autoref{eq:theta-below},
+and \autoref{eq:axoid-set-definition} we get
+\begin{equation}
+\theta(t,f) = \begin{cases}
+  \tan^{-1} \frac{f_k-f_{k-1}}{t_k-t_{k-1}} -\frac{\pi}{2} \mod 2\pi & f > f_{k-1} + \frac{t-t_{k-1}}{t_k-t_{k-1}}(f_k-f_{k-1})\\
+\tan^{-1} \frac{f_k-f_{k-1}}{t_k-t_{k-1}} + \frac{\pi}{2} \mod 2\pi & f < f_{k-1} + \frac{t-t_{k-1}}{t_k-t_{k-1}}(f_k-f_{k-1})\\
+0 & f = f_{k-1} + \frac{t-t_{k-1}}{t_k-t_{k-1}}(f_k-f_{k-1}).
+\end{cases}
+\end{equation}
+We then expect to find edges with orientation $\theta'$ at $(t,f)$
+if $\cos^{-1}(\theta' - \theta(t,f)) >0$.  We show what this means
+in the context of a theoretical rising formant in
+\autoref{fig:rising-formant-edge-theory} or a falling formant
+in \autoref{fig:falling-formant-edge-theory}.
+\begin{figure}
+\centering
+\input{plots/axoid_edges1}
+\caption{Edge orientations used by rising formants}
+\label{fig:rising-formant-edge-theory}
+\end{figure}
+\begin{figure}
+\centering
+\input{plots/axoid_edges2}
+\caption{Edge orientations used by falling formants}
+\label{fig:falling-formant-edge-theory}
+\end{figure}
+This means that we can now construct probability templates
+for observing edges of a given rotation $\theta'$ at location
+$(t,f)$.  Namely if we let $p(t,f,r)$ be a probability array
+over time-frequency locations and edge orientations then
+\begin{equation}\label{eq:oriented-probability-array-axoid}
+p(t,f,r) = \begin{cases}
+p_{obj} & \cos^{-1}|\theta' - \theta(t,f)| >\epsilon\\
+p_{bgd} & \text{otherwise}
+\end{cases}
+\end{equation}
+where $\epsilon > 0$ is small, $p_{obj}$ is large (close to one),
+while $p_{bgd}$ is small and closer to zero.
+
+\subsection{Discrete Segment Axoids}
+
+The preceding discussion neglected the fact that these axoid
+templates are over a discrete grid.  We now consider approaches
+to parameterizing discrete axoids $A\in\mathcal{D}(A)$.  Just
+as before, these are parameterized with their center lines $C(A)$
+and a frequency span $\Omega$ except that due to the discrete
+nature it is most natural to define $\Omega\in\mathbb{Z}$
+where $\Omega=2F$ so that there are $F=\Omega/2$ frequency locations
+above and below the center line $C(A)$.  The locations above
+the same probability array as given by \autoref{eq:oriented-probability-array-axoid}
+while the locations below the center line will share a probability
+array at each location with the opposite polarities.
+To define the center line $C(A)$ we may make use of discrete geometry
+\cite{Dorst86}
+however, for simplicity we initially just consider five possibilities:
+\begin{enumerate}
+\item rising: $(1,1,1,1)$, slope is $1$
+\item slowly rising $(1,0,1,0)$, slope is $1/2$
+\item constant $(0,0,0,0)$, slope is $0$
+\item slowly falling $(-1,0,-1,0)$, slope is $-1/2$
+\item falling $(-1,-1,-1,-1)$, slope is $-1$
+\end{enumerate}
+where the sequence specifies at each grid point whether there
+is an increase, decrease, or level step.  The five different
+digital centerlines are visualized in \autoref{fig:digital-axoid-centerlines-five}.
+\begin{figure}
+\centering
+\begin{subfigure}
+\begin{tikzpicture}
+\draw[step=.5cm,gray,very thin] (0,-2) grid (2.5,2.5);
+\fill[blue!40!white] (0,0) rectangle (.5,.5);
+\fill[blue!40!white] (.5,.5) rectangle (1,1);
+\fill[blue!40!white] (1,1) rectangle (1.5,1.5);
+\fill[blue!40!white] (1.5,1.5) rectangle (2,2);
+\fill[blue!40!white] (2,2) rectangle (2.5,2.5);
+\end{tikzpicture}
+\end{subfigure}
+~
+\begin{subfigure}
+\begin{tikzpicture}
+\draw[step=.5cm,gray,very thin] (0,-2) grid (2.5,2.5);
+\fill[blue!40!white] (0,0) rectangle (.5,.5);
+\fill[blue!40!white] (.5,.5) rectangle (1,1);
+\fill[blue!40!white] (1,.5) rectangle (1.5,1);
+\fill[blue!40!white] (1.5,1) rectangle (2,1.5);
+\fill[blue!40!white] (2,1) rectangle (2.5,1.5);
+\end{tikzpicture}
+\end{subfigure}
+~
+\begin{subfigure}
+\begin{tikzpicture}
+\draw[step=.5cm,gray,very thin] (0,-2) grid (2.5,2.5);
+\fill[blue!40!white] (0,0) rectangle (.5,.5);
+\fill[blue!40!white] (.5,0) rectangle (1,.5);
+\fill[blue!40!white] (1,0) rectangle (1.5,.5);
+\fill[blue!40!white] (1.5,0) rectangle (2,.5);
+\fill[blue!40!white] (2,0) rectangle (2.5,.5);
+\end{tikzpicture}
+\end{subfigure}
+~
+\begin{subfigure}
+\begin{tikzpicture}
+\draw[step=.5cm,gray,very thin] (0,-2) grid (2.5,2.5);
+\fill[blue!40!white] (0,.5) rectangle (.5,0);
+\fill[blue!40!white] (.5,0) rectangle (1,-.5);
+\fill[blue!40!white] (1,0) rectangle (1.5,-.5);
+\fill[blue!40!white] (1.5,-.5) rectangle (2,-1);
+\fill[blue!40!white] (2,-.5) rectangle (2.5,-1);
+\end{tikzpicture}
+\end{subfigure}
+~
+\begin{subfigure}
+\begin{tikzpicture}
+\draw[step=.5cm,gray,very thin] (0,-2) grid (2.5,2.5);
+\fill[blue!40!white] (0,.5) rectangle (.5,0);
+\fill[blue!40!white] (.5,0) rectangle (1,-.5);
+\fill[blue!40!white] (1,-.5) rectangle (1.5,-1);
+\fill[blue!40!white] (1.5,-1) rectangle (2,-1.5);
+\fill[blue!40!white] (2,-1.5) rectangle (2.5,-2);
+\end{tikzpicture}
+\end{subfigure}
+\caption{Different digital center lines for the axoids}
+\label{fig:digital-axoid-centerlines-five}
+\end{figure}
+We may also visualize where each of the eight edge orientations
+pick up on a synthetic formant in \autoref{fig:eight-binary-edges-on-synthetic-formants}
+\begin{figure}
+\centering
+\begin{subfigure}
+\centering
+\includegraphics[scale=0.5]{plots/seq1111edge_grid.png}
+\end{subfigure}
+\quad
+\begin{subfigure}
+\centering
+\includegraphics[scale=0.5]{plots/seq1010edge_grid.png}
+\end{subfigure}
+\quad
+\begin{subfigure}
+\centering
+\includegraphics[scale=0.5]{plots/seq0000edge_grid.png}
+\end{subfigure}
+\quad
+\begin{subfigure}
+\centering
+\includegraphics[scale=0.5]{plots/seq-10-10edge_grid.png}
+\end{subfigure}
+\quad
+\begin{subfigure}
+\centering
+\includegraphics[scale=0.5]{plots/seq-1-1-1-1edge_grid.png}
+\end{subfigure}
+\label{fig:eight-binary-edges-on-synthetic-formants}
+\caption{Edges of the eight orientations detected on synthetic formant images}
+\end{figure}
+and from those we see a clear pattern to which edges are detected
+which then allows us to define the five templates we will use
+for finding formants.
+
+\appendix
+
+\section{Axoid Code}
+
+This section discusses the computer implementation of axoids.
+We have a program \texttt{src/axoids.py} which is the main
+file for working with axoids.  We have implemented the following
+functions:
+\begin{enumerate}
+\item \texttt{read\_axoid}
+\item \texttt{write\_axoid}
+\item \texttt{construct\_axoid}
+\end{enumerate}
+The data structure used to implement axoids is numpy records.
+
+\bibliographystyle{plain}
+\bibliography{../bibliography}
+\end{document}
