@@ -1,0 +1,136 @@
+%% LyX 2.0.2 created this file.  For more info, see http://www.lyx.org/.
+%% Do not edit unless you really know what you are doing.
+\documentclass[english]{article}
+\usepackage[T1]{fontenc}
+\usepackage[latin9]{inputenc}
+\usepackage{listings}
+\usepackage{graphicx}
+\usepackage{esint}
+\usepackage{babel}
+\usepackage{fullpage}
+\usepackage{hyperref}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{subcaption}
+\usepackage{tikz}
+\usepackage{verbatim}
+
+%\theoremstyle{plain}% default
+\newtheorem{thm}{Theorem}[section]
+\newtheorem{lem}[thm]{Lemma}
+\providecommand*{\lemautorefname}{Lemma}
+\newtheorem{prop}[thm]{Proposition}
+\newtheorem{cor}[thm]{Corollary}
+%\theoremstyle{definition}
+\newtheorem{defn}{Definition}[section]
+\newtheorem{conj}{Conjecture}[section]
+\newtheorem{exmp}{Example}[section]
+%\theoremstyle{remark}
+\newtheorem{rem}{Remark}
+\newtheorem{note}{Note}
+\newtheorem{case}{Case}
+
+\usepackage[ruled]{algorithm2e}
+\renewcommand{\algorithmcfname}{ALGORITHM}
+\SetAlFnt{\small}
+\SetAlCapFnt{\small}
+\SetAlCapNameFnt{\small}
+
+
+\title{Reassignment Fixed Points}
+\author{Mark Stoehr}
+\date{\today}
+
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+
+\section{Introduction}
+
+Time Frequency reassignment is an algorithm for improving spectrogram readability \cite{auger03}.  We wish to
+contribute to an alternative use of the reassignment computation where we use it for spectral peak detection
+rather than spectral transformation.  One of the standard interpretations of reassignment is that it finds
+the ``center-of-mass'' of a time-frequency distribution (commonly the Wigner-Ville) and it corrects for the
+distortion created by a time-frequency computation.  We will instead interpret it as a mode-seeking algorithm
+for the Wigner-Ville distribution and use it to give a binary mode-map of the time-frequency data.
+
+Throughout the paper $x[t]$ will denote a discrete-time amplitude signal and $x(t)$ will denote
+a continuous-time amplitude signal at time $t$. We presume that all observations are on the interval $[0,T]$.
+Generally $F$ will either denote the maximum considered frequency or the number of frequency bins $T$ may
+also denote the number of time bins.
+
+\section{Reassignment Algorithms}
+
+Given a Wigner-Ville distribution $W(t,f)$ for the signal $x(t)$ and a kernel $h\left(\frac{|t-\tau|}{\sigma}\right)$ we 
+may write the reassigned times $(\hat{t},\hat{f})$ for $(t,f)$ as \cite{auger03}
+\begin{align}
+\hat{t} &=  t -\frac{\int\int \tau W(t-\tau,f-\omega) h\left(\frac{|\tau|}{\sigma_1}\right)h\left(\frac{|\omega|}{\sigma_2}\right)d\tau d\omega}{
+ \int\int W(t-\tau,f-\omega) h\left(\frac{|\tau|}{\sigma_1}\right)h\left(\frac{|\omega|}{\sigma_2}\right)d\tau d\omega}\\
+\hat{f} &=  f -\frac{\int\int \omega W(t-\tau,f-\omega) h\left(\frac{|\tau|}{\sigma_1}\right)h\left(\frac{|\omega|}{\sigma_2}\right)d\tau d\omega}{
+ \int\int W(t-\tau,f-\omega) h\left(\frac{|\tau|}{\sigma_1}\right)h\left(\frac{|\omega|}{\sigma_2}\right)d\tau d\omega}.
+\end{align}
+and that we may more succinctly compute these in the case of a spectrogram as
+\begin{align}
+\hat{t}(t,w) &= t - \Re\left\{\frac{X(t,f; \mathcal{T}h) X^*(t,f; h)}{|X(t,f; h)|^2 }\right\}\\
+\hat{f}(t,w) &= f + \Im\left\{\frac{X(t,f; \mathcal{D}h) X^*(t,f; h)}{|X(t,f; h)|^2 }\right\}
+\end{align}
+where $X(t,f; h)$ is the spectrogram computed with window $h$ at time-frequency location $t,f$, $\mathcal{D}h(t)=\frac{d}{dt}h(t)$, and $\mathcal{T}h(t)=th(t)$.
+Usually the reassignment estimates are used to construct a reassigned time-frequency distribution $R(t,f)$ where
+\begin{equation}
+R(t,f) = \int\int W(\tau,\omega) \delta(\tau-\hat{t}(t,f))\delta(\omega -\hat{f}(t,f))d\tau d\omega.
+\end{equation}
+However, we propose to find the modes of the reassigned spectrogram, which are those points that are not mapped to other points.  Namely reassignment
+is essentialy just a function from the data to itself and we expect to find fixed points along ridges and on impulsive noise.  We present a summary of a basic fixed-point finding algorithm
+in \autoref{alg:basic-fixed-points}.
+\begin{algorithm}[t]
+\SetAlgoNoLine
+\KwIn{Reassignment operators $\hat{t}\colon [T]\times [F]\to [T]$, $\hat{f}\colon [T]\times [F]\to [F]$, a stack $U$, quantization factor $q$ for frequency, quantization factor $r$ for time}
+\KwOut{Fixed Point Map $M\in ([T]\times[F])^{T\times F}$}
+$\forall(t,f)\;M(t,f) \leftarrow (-1,-1)$\;
+
+\For{$t=1,2,\ldots,T$}{
+  \For{$f=1,2,\ldots,F$}{
+    NotConverged $\leftarrow$ True\;
+    \While{ NotConverged}{
+
+         \uIf{$M(t,f)\neq (-1,-1)$ }{
+             NotConverged $\leftarrow$ False\;
+             
+           }\Else{
+           Push $(t,f)$ onto $U$\;
+           $(t,f)\leftarrow (\hat{t}(t,f),\hat{f}(t,f))$\;
+           $M(t,f)\leftarrow  (\lfloor t/r+\frac{1}{2}\rfloor,\lfloor f/q +\frac{1}{2}\rfloor)$\;
+           
+         }
+      
+    \While{$U$ not empty}{
+      $(t',f')\leftarrow $ pop $ U$\;
+      $M(t',f') = M(t,f)$\;
+      
+      }
+    }
+}}
+  
+\caption{Find Fixed Points}
+\label{alg:basic-fixed-points}
+\end{algorithm}
+The basic idea is to start from each location of the time-frequency array and go in the direction
+indicated by the function until you hit a location that you have already visited which is
+declared the mode.  Each
+node of the time-frequency representation is then marked by the end point of the path the
+are on.  We include quantization factors as we may only want a coarse sampling of the time frequency plane for locations.  The number of locations in the fixed point map $M$ will generally be
+much smaller than the total number of locations and thus we get a binary map indicating 
+which locations are fixed points.  The key loop invariant that the algorithm maintains is that
+by the end of the main while block every entry of $M$ either points to $(-1,-1)$ or to a mode.
+
+\subsection{Empirical Evaluation of Simple Fixed Point Finder}
+
+In our empirical evaluation we are primarily testing whether the fixed points found
+by the algorithm correspond to the type of strucures we think are important in the
+spectrogram.
+
+\bibliographystyle{plain}
+\bibliography{../bibliography}
+\end{document}
