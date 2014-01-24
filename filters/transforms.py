@@ -144,6 +144,60 @@ def spectrogram_magnitude_gradients(x,sample_rate,freq_cutoff,winsize,nfft,overs
     return abs_avg[:,:cutoff_idx], avg_dM_dt[:,:cutoff_idx], avg_dM_dw[:,:cutoff_idx]
 
 
+def spectrogram_reassignment(x,sample_rate,freq_cutoff,winsize,nfft,oversampling,
+                                    h,dh,tt,return_midpoints=False):
+    """
+    Returns the spectrogram as well as magnitude gradients
+    all of these are multitaper
+    """
+    N = len(x)
+    nframes = int(.5 + N/winsize*2**oversampling)
+
+    greater_than_winlength = winsize*np.ones((nframes,nfft)) > np.arange(nfft)
+
+    indices = (np.arange(nfft,dtype=int)-int(nfft/2))[np.newaxis, : ] + int(nfft/2**oversampling)*np.arange(nframes,dtype=int)[:,np.newaxis]
+    
+    indices *= (2*(indices > 0)-1)
+    # symmetrize the tail
+    tail_indices = indices > N-1
+    indices[tail_indices] = N-1 - (indices[tail_indices] - N+1)
+
+    """
+    """
+    abs_avg = np.zeros(indices.shape)
+    avg_dM_dt = np.zeros(indices.shape)
+    avg_dM_dw = np.zeros(indices.shape)
+
+    for i in xrange(5):
+        f = np.fft.fft((x[indices]*greater_than_winlength) * zero_pad_window(h[i],nfft-winsize),nfft)
+        f_mv = f * np.exp(2j*np.pi*np.outer(indices[:,0],np.arange(indices.shape[1]))/nfft)
+        abs_avg += np.abs(f_mv)
+        df = np.fft.fft((x[indices]*greater_than_winlength) * zero_pad_window(dh[i],nfft-winsize),nfft)
+        df_mv = df * np.exp(2j*np.pi*np.outer(indices[:,0],np.arange(indices.shape[1]))/nfft)
+        tf = np.fft.fft((x[indices]*greater_than_winlength)*zero_pad_window(tt*h[i],nfft-winsize) ,nfft)
+        tf_mv = tf * np.exp(2j*np.pi*np.outer(indices[:,0],np.arange(indices.shape[1]))/nfft)
+
+        abs_f_mv = np.abs(f_mv)**2
+        t_hat = np.real((df_mv * f_mv.conj())/abs_f_mv)
+        dM_dw = - np.imag((tf_mv * f_mv.conj())/abs_f_mv)
+        avg_dM_dt += dM_dt
+        avg_dM_dw += dM_dw
+
+    abs_avg/=5
+    avg_dM_dt /= 5
+    avg_dM_dw /= 5
+
+
+
+
+    cutoff_idx = int(freq_cutoff/sample_rate * winsize)
+
+    if return_midpoints:
+        return abs_avg[:,:cutoff_idx], avg_dM_dt[:,:cutoff_idx], avg_dM_dw[:,:cutoff_idx], indices[:,int(indices.shape[1]/2+.5)]
+
+    return abs_avg[:,:cutoff_idx], avg_dM_dt[:,:cutoff_idx], avg_dM_dw[:,:cutoff_idx]
+
+
 def binary_phase_features(x,sample_rate,freq_cutoff,winsize,nfft,oversampling,h,dh,tt,gfilter,gsigma,fthresh,othresh,spread_length=3,return_midpoints=True):
     """
     We assume x has already been preemphasized, this just recovers the frequency components of the signal.
