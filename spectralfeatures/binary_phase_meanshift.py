@@ -32,20 +32,20 @@ def frequency_constrained_meanshift(X,k,tau,sigmasq,niter=10):
 
         # quit if you can't use any of the times
         if np.sum(use_idx) == 0: continue
-        
+
         for i in xrange(niter):
-            D = np.exp(- ((( (-2)*np.outer(Fs,use_freqs) + Fssq[:,np.newaxis]) + use_freqs**2) + time_distances )/ (2*sigmasq)) 
-            Fs = np.dot(D,use_freqs) / D.sum(1)                
+            D = np.exp(- ((( (-2)*np.outer(Fs,use_freqs) + Fssq[:,np.newaxis]) + use_freqs**2) + time_distances )/ (2*sigmasq))
+            Fs = np.dot(D,use_freqs) / D.sum(1)
             Fssq = Fs**2
 
-            
-        I = np.unique((fixed_points(Fs*k)/k + .5).astype(int))
+
+        I = np.unique((oned_fixed_points(Fs*k)/k + .5).astype(int))
         Y[t][I] = 1
 
     return Y
 
 
-def fixed_points(M):
+def oned_fixed_points(M):
     M = (M + .5 ).astype(int)
     I = -1* np.ones(len(M),dtype=int)
     S = -1*np.ones(len(M),dtype=int)
@@ -55,7 +55,7 @@ def fixed_points(M):
         while max_not_found:
             try:
                 equality_test = M[w] == w
-            except: 
+            except:
                 import pdb; pdb.set_trace()
             if equality_test:
                 max_not_found = False
@@ -73,3 +73,47 @@ def fixed_points(M):
                 S[sidx] = w
                 w = M[w]
     return I
+
+def basic_reassignment_fixed_points(t_hat,f_hat,t_q,f_q):
+    """
+    Parameters
+    ----------
+    t_hat : (n_times, n_freqs)
+        Reassignment operator for times
+    f_hat : (n_times, n_freqs)
+        Reassignment operator for frequencies
+    t_q : int
+        Quantization factor for times
+    f_q : int
+        Quantization factor for frequencies
+    """
+    n_times, n_freqs = t_hat.shape
+    # mapped coordinates for time and frequency
+    Mt = -1 * np.ones( (n_times,n_freqs),dtype=int)
+    Mf = Mt.copy()
+    # stack and index
+    Ut = -1 * np.ones( n_times*n_freqs,dtype=int)
+    Uf = Ut.copy()
+    uidx = -1
+
+    for t in xrange(n_times):
+        for f in xrange(n_freqs):
+            NotConverged = True
+            while NotConverged:
+                if Mt[t,f] != -1 and Mf[t,f] != -1:
+                    NotConverged = False
+                else:
+                    uidx +=1
+                    Ut[uidx] = t
+                    Uf[uidx] = f
+                    t1 = t_hat[t,f]
+                    f1 = f_hat[t,f]
+                    Mt[t,f] = int(t1/t_q + .5)
+                    Mf[t,f] = int(f1/f_q + .5)
+                    t = t1
+                    f = f1
+
+                while uidx >= 0:
+                    Mt[Ut[uidx],Uf[Uidx]] = Mt[t,f]
+                    Mf[Ut[uidx],Uf[Uidx]] = Mf[t,f]
+                    uidx = uidx-1
