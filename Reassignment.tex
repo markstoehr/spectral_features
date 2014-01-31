@@ -1,5 +1,19 @@
-%% LyX 2.0.2 created this file.  For more info, see http://www.lyx.org/.
-%% Do not edit unless you really know what you are doing.
+%% This file is part of spectral_features.
+
+%%     spectral_features is free software: you can redistribute it and/or modify
+%%     it under the terms of the GNU General Public License as published by
+%%     the Free Software Foundation, either version 3 of the License, or
+%%     (at your option) any later version.
+
+%%     spectral_features is distributed in the hope that it will be useful,
+%%     but WITHOUT ANY WARRANTY; without even the implied warranty of
+%%     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+%%     GNU General Public License for more details.
+
+%%     You should have received a copy of the GNU General Public License
+%%     along with spectral_features.  If not, see <http://www.gnu.org/licenses/>.
+
+
 \documentclass[english]{article}
 \usepackage[T1]{fontenc}
 \usepackage[latin9]{inputenc}
@@ -37,7 +51,7 @@
 \SetAlCapNameFnt{\small}
 
 
-\title{Reassignment Fixed Points}
+\title{Fast Mean-Shift on the Wigner-Ville Distribution}
 \author{Mark Stoehr}
 \date{\today}
 
@@ -49,17 +63,273 @@
 
 \section{Introduction}
 
-Time Frequency reassignment is an algorithm for improving spectrogram readability \cite{auger03}.  We wish to
-contribute to an alternative use of the reassignment computation where we use it for spectral peak detection
-rather than spectral transformation.  One of the standard interpretations of reassignment is that it finds
-the ``center-of-mass'' of a time-frequency distribution (commonly the Wigner-Ville) and it corrects for the
-distortion created by a time-frequency computation.  We will instead interpret it as a mode-seeking algorithm
-for the Wigner-Ville distribution and use it to give a binary mode-map of the time-frequency data.
+In this paper we introduce a framework for speech recognition using
+time-frequency ridges and modes.  
+\begin{enumerate}
+\item Problem: Spectrogram has poor localization and not cross terms
+\item Problem: Wigner-Villed has good localization but cross terms
+\item Why are these a problem: localization is important for distinguishing speech sounds
+\item cross terms mean that its hard to tell what corresponds to a component and what is a phantom
+\item Partial solution: Reassignment moves energy to center-of-gravity--produces better localization
+\item Problem: Still don't have a map of the modes
+\item In reality we want a binary feature map that indicates the presence of a certain type of component or its non-presence
+\item Idea: Mean-shift proceduces that kind of map
+\item Problem: Mean-shift is slow and computationally annoying
+\item Idea: Reassignment (under certain settings) is fast and is essentially one-step of mean-shift done at a dense grid of time-frequency locations
+\item Idea: Use the reassignment vector-field to run mean-shift until it converges at all locations and output the resultant binary map
+\end{enumerate}
+
+Similar ideas to this were considered in \cite{tfsnakes,ozertem11} where the authors specifically drew the connection
+between mean-shift and reassignment. However, they did not use reassignment algorithms to perform mean-shift on the WVD.
+
+
+Acoustic phoneticians largely theorize that much of speech can described in
+terms of formants, formant transitions, harmonics, frication,
+and bursts.  In the language of time-frequency these are harmonic components,
+chirps, and transients.  While the spectrogram remains dominant, researchers in
+time-frequency have shown that the spectrogram performs poorly at localizing
+harmonics, chirps, and transients.  The time-frequency representation that
+localizes these phenomena optimally is the Wigner-Ville distribution (WVD), however
+the WVD suffers from the problem that if we compute it on a signal with multiple
+components, such as speech, in addition to perfectly localizing the components
+there are cross-terms that are generated that are potentially negative and hard
+to interpret.  Much work has gone into finding methods of smoothing the WVD
+to eliminate the effects of these cross-terms and it has been shown that the 
+spectrogram is a particular type of smoothing of the WVD.
+
+
+
+  The purpose of these representations is to capture
+time-varying frequency information, or, more generally an estimate
+of the Fourier transform of the
+autocovariance function.  In speech recognition these representations are important
+because they convey information about the cues used in speech recognition.  
+Acoustic phoneticians \cite{stevens98} generally describe speech in terms
+of formants, bursts, and other features that correspond to modes and ridges in
+a time-frequency distribution (generally the spectrogram). With a few exceptions
+researchers have not explicitly set out to find these essentially diffeomorphic
+characteristics of time-frequency representations or developed fast algorithms to
+find them.  A prominent iterative algorithm, mean-shift, is very good at finding these
+diffeomorphic structures, but its run time is prohibitively expensive in
+a time-frequency context.  However, it has been noted that a single iteration of mean-shift
+correspond to a standard time-frequency algorithm known as the reassignment method.
+In this paper, we complete this connection by using a fast algorithm to run mean-shift
+to convergence in the time-frequency plane giving us a practical mode-based time-frequency
+representation.
 
 Throughout the paper $x[t]$ will denote a discrete-time amplitude signal and $x(t)$ will denote
-a continuous-time amplitude signal at time $t$. We presume that all observations are on the interval $[0,T]$.
+a continuous-time amplitude signal at time $t$. We assume that in either case the signal has zero mean.
+ We presume that all observations are on the interval $[0,T]$.
 Generally $F$ will either denote the maximum considered frequency or the number of frequency bins $T$ may
-also denote the number of time bins.
+also denote the number of time bins. Except where otherwise noted, the domain of an integral $\int$ is $(-\infty,\infty)$.
+
+\section{Mean-Shift}
+
+We present a special case of the mean-shift algorithm that will be adapted for time-frequency purposes.
+Given samples $\{x_n\}_{n=1}^N\subset \mathbb{R}^D$ and a normalized, nonnegative, symmetric function $K\colon \mathbb{R}^D\to\mathbb{R}_+$,
+a standard estimate for the  probability density of $\{x_n\}_{n=1}^N$ is the kernel density estimate
+\begin{equation}
+\hat{\mathbb{P}}(x ; k) = \sum_{n=1}^N K(x-x_n).
+\end{equation}
+A common choice for $K$ is the Gaussian kernel $K(x-y)=\exp\left(-\frac{\|x-y\|^2}{2\sigma^2}\right)$ where
+$\sigma$ is called the bandwidth parameter.  Mean-shift is an algorithm which given a point $y\in\mathbb{R}^D$
+iteratively hill-climbs
+$\hat{\mathbb{P}}(x ; \sigma)$ from $y$ so that it conveges on a mode $y_*$, so that all the points close to
+a mode will converge to it \cite{fukunaga75,chengms95,Comaniciu02}. The algorithm is presented in the 
+Gaussian kernel case in \autoref{alg:gauss-mean-shift}.
+\begin{algorithm}[t]
+\SetAlgoNoLine
+\KwIn{Samples $\{x_n\}_{n=1}^N\subset\mathbb{R}^D$, query point $y\in\mathbb{R}^D$, bandwidth-parameter $\sigma > 0$, tolerance $\epsilon > 0$}
+\KwOut{Estimated pdf mode $\hat{y}$ near $y$}
+
+$y_0\leftarrow y$\;
+$i\leftarrow 0$\;
+\While{$\frac{\|y_{i}-y_{i-1}\|}{\|y\|} > \epsilon$}{
+$y_{i+1} = \frac{\sum_{n=1}^N x_n \exp\left\{-\frac{1}{2\sigma^2}\|y_i-x_n\|^2\right\}}{\sum_{n=1}^N \exp\left\{-\frac{1}{2\sigma^2}\|y_i-x_n\|^2\right\}}$\;
+$i\left\leftarrow i+1$\;
+}
+\Return  $y_i$\;
+\caption{Gaussian Kernel Mean Shift}
+\label{alg:gauss-mean-shift}
+\end{algorithm}
+The algorithm is iterative and in each round your estimate $y$ is updated to $y'$ where
+\begin{equation}\label{eq:mean-shift-step}
+y' = \frac{\sum_{n=1}^N x_n \exp\left\{-\frac{1}{2\sigma^2}\|y-x_n\|^2\right\}}{\sum_{n=1}^N \exp\left\{-\frac{1}{2\sigma^2}\|y-x_n\|^2\right\}}.
+\end{equation}
+
+\subsection{Weighted Mean-Shift}
+
+In this paper we will investigate a weighted variant of mean shift where the mean shift step in \autoref{eq:mean-shift-step}
+is instead
+\begin{equation}\label{eq:weighted-mean-shift-step}
+y' = \frac{\sum_{n=1}^N x_n w_n \exp\left\{-\frac{1}{2\sigma^2}\|y-x_n\|^2\right\}}{\sum_{n=1}^N w_n\exp\left\{-\frac{1}{2\sigma^2}\|y-x_n\|^2\right\}}
+\end{equation}
+where the weights $\{w_n\}_{n=1}^N$ are nonnegative, in particular they will have a time-frequency meaning.
+We recall that Comaniciu showed in \cite{Comaniciu02} that mean-shift enjoys the standard mode convergence properties with
+weighted samples we conjecture that the modes will be the modes of the weighted KDE estimate
+\begin{equation}
+\mathbb{F}(y; \sigma) = \sum_{n=1}^N w_n \exp\left\{-\frac{1}{2\sigma^2}\|y-x_n\|^2\right\}.
+\end{equation}
+
+\section{Time-Frequency}
+
+Quadratic time-frequency distributions of a signal $x(t)$ may be written \cite[eq. 5]{andrieux87}
+\begin{equation}\label{eq:andrieux-general}
+F_x(t,\omega ; K)=\int\int K(t-t',\omega-\omega')W_x(t',\omega')\;dt'\;d\omega'
+\end{equation}
+where  $W_x$ is the Wigner-Ville distribution (WVD) is the Fourier transform of the empirical
+autocovariance function (given that the first moment of $x$ is zero)
+\begin{equation}\label{eq:wigner-ville-distribution}
+  W_x(t,\omega) = \int x(t+\frac{1}{2}\tau)x^*(t-\frac{1}{2}\tau)e^{-i\omega\tau}\;d\tau,
+\end{equation} 
+and $K$ is a general smoothing kernel (usually a low-pass filter). As shown in \cite{andrieux87} by
+letting (!!! NOT SURE ABOUT THIS STEP -- JUST WHAT AUTHOR CLAIMS !!!) (ACTUALLY ITS PROBABLY THE CONVOLUTION
+THEOREM BUT I NEED TO WORK OUT THE DETAILS)
+\begin{equation}
+K(t,\omega) = \frac{1}{(2\pi)^2} \int\int \phi(\tau,\theta)\exp{i(\tau t +\omega\theta)}d\tau\;d\omega
+\end{equation}
+\autoref{eq:andrieux-general} can be shown to encompass all of  Cohen's class (which includes every
+quadratic time-frequency representation) \cite[p. 136]{cohen95}:
+\begin{equation}\label{eq:cohen-general}
+C_x(t,\omega ; \phi)=\frac{1}{4\pi^2} \int\int\int x(u-\frac{1}{2}\tau)x(u+\frac{1}{2}\tau)\phi(\theta,\tau)e^{-i\theta t-i\tau\omega+i\theta u}\;du\;d\tau\;d\theta.
+\end{equation}
+As such quadratic time-frequency distributions are simply a smoothed
+Fourier transform of the empirical autocovariance function, so we may concentrate on 
+properties of the WVD without any loss of generality. The WVD, as shown in \cite[ch. 2]{cohen95}
+perfectly localizes
+\begin{enumerate}
+\item harmonics
+\item chirps
+\item transients
+\end{enumerate}
+and that in many simple signal mixtures these will correspond to the modes of WVD so it is natural to ask whether we can find
+those modes using mean-shift.
+We let $D=2$ and $\{(t_n,\omega_n)\}_{n=1}^N\subset\mathbb{R}^D$ where each $(t_n,\omega_n)$ is a time-frequency coordinate,
+$\{(t_n,\omega_n)\}_{n=1}^N$ be a dense lattice of samples over some interval $[0,T]\times [0,\Omega]$, and
+$\{w_n\}_{n=1}^N$ be weights where $w_n=W_x(t_n,\omega_n )$. Then we have a mean-shift iteration on the WVD, but
+we run into a problem because the conditions for convergence given in \cite{Comaniciu02} require that the weights
+be nonnegative.
+
+\subsection{Hermite Smoothed Wigner-Ville Distribution and Spectrograms}
+
+\begin{enumerate}
+\item Wigner-Ville distribution of a Hermite function (physicist Hermite polynomial modulated by a Gaussian) is just a Hermite function
+\item Spectrogram is just the Wigner-Ville Distribution of the signal convolved with the Wigner-Ville distribution of the window function
+\item So Hermite-windowed spectrograms are just Hermite function smoothed (the special case of Gaussian windows also holds true)
+\item Also spectrogram is always nonnegative so weighted mean-shift with appropriately chosen kernels weighted by the WVD will have the
+requisite non-negativity
+\end{enumerate}
+
+ Under these conditions
+we conjecture that weighted mean-shift in \autoref{eq:weighted-mean-shift-step}
+will converge to modes of the WVD corresponding to single signal components.  We also
+note that we are working in the continuous-time case so the weighted mean-shift step is
+\begin{equation}\label{continuous-wvd-mean-shift}
+(t',\omega') =\left(\frac{\int \int (t-u)\phi(u,\nu) W_x(t-u,\omega-\nu)\; du\;d\nu}{\int \int \phi(u,\nu) W_x(t-u,\omega-\nu)\; du\;d\nu},
+\frac{\int \int (\omega-\nu)\phi(u,\nu) W_x(t-u,\omega-\nu)\; du\;d\nu}{\int \int \phi(u,\nu) W_x(t-u,\omega-\nu)\; du\;d\nu}
+\right).
+\end{equation}
+
+A more general result establishes the connection to smoothing:
+\begin{thm}
+Let $\mathbb{X}$ denote the set of signal, i.e. functions $\mathbb{C}\to\mathbb{C}$.
+The set of spectrograms $\{ S_x(t,\omega; h\}_{h\in\mathcal{H},x\in\mathbb{X}}$ where
+\begin{equation}
+S_x(t,\omega ; h) = \left|\int x(t-\tau)h(\tau)e^{-i\omega\tau}\;d\tau\right|^2
+\end{equation}
+and $\mathcal{H}$ is the set of window functions
+is precisely the set of Wigner-Ville distributions smoothed by a
+stationary positive semi-definite kernel
+$\{ F_x(t,\omega ; K)\}_{K\in\mathcal{K}_{stationary},x\in\mathbb{X}}$
+where 
+\begin{equation}
+F_x(t,\omega ; K) = \int\int K(t-\tau,\omega-\nu) W_x(\tau,\omega)\;d\tau\;d\omega.
+\end{equation}
+\end{thm}
+
+We can then prove a general sufficient condition for convergence of mean-shift when
+working with a kernel smoothed WVD:
+\begin{thm}
+Whenever $K$ is a stationary positive semi-definite kernel then mean-shift using that kernel
+converges and finds modes. 
+\begin{equation}
+
+\end{equation}
+\end{thm}
+
+\section{Time-Frequency Reassignment}
+
+Having worked out some of the theory
+we are then in a position to consider a practical proposition about running
+mean shift on the signal
+\begin{thm}
+Whenever $K$ is a stationary positive semi-definite kernel with time support-length $\Omega$
+ then mean-shift using that kernel
+over the discrete Wigner-Ville distribution (DWVD) on a discrete sampled signal $x[t]$ with
+$T$ points runs in time $O(T\Omega\log \Omega)$.
+\end{thm}
+The theorem is proven by showing that the algorithm can be broken into two parts:
+\begin{enumerate}
+\item Mean-shift vector field computation over all coordinates $\{(t_n,\omega_n)\}_{n=1}^N$ (where $N=O(T\Omega)$) which is
+done in time $O(T\Omega\log\Omega)$.
+\item Assign a mode to each point in the vector field by tracing it out--which has time complexity $O(T\Omega)$.
+\end{enumerate}
+The first item is shown via this theorem applied to the discrete domain:
+\begin{thm}
+Let $\phi(\tau-\tau',\nu-\nu')$ be a stationary positive semi-definite kernel, $x(t)$ be a signal, and $\mathcal{T}$ defined so
+ $\mathcal{T}_tf(t,\cdot)=tf(t,\cdot)$ then there exists a window function $h$ such that
+\begin{equation}
+\phi(t,\omega) = \int h(t+\frac{1}{2}\tau)h^*(t-\frac{1}{2}\tau)e^{-i\omega\tau}\;d\tau
+\end{equation}
+so
+\begin{equation}
+(\mathcal{T}\phi * W_x)(t,\omega) = R_x(t,\omega;h) R_x(t,\omega; \mathcal{T}h)
+\end{equation}
+and
+\begin{equation}
+(\mathcal{D}_t\phi * W_x)(t,\omega) = R_x(t,\omega;h) R_x(t,\omega; \mathcal{D}h)
+\end{equation}
+where $\mathcal{D}_t=\frac{\partial}{\partial t}$ and
+\begin{equation}
+R_x(t,\omega; h) = \int x(t-\tau)h(\tau)e^{-i\tau\omega}\; d\tau
+\end{equation}
+is the short-time Fourier transfrom (STFT) with window $h$.
+\end{thm}
+There is a continuous time version and discrete time version of the above theorem. Since we 
+are working on discrete-time signals we will prove the discrete
+time version.  An important lemma that we use is
+\begin{lem}
+Let $W_x[t,\omega; h,g]$ be a function on $(t,\omega)$ with window functions $h$ and $g$ so that
+\begin{equation}
+W_x[t,\omega; h,g] = \sum_{\tau=0}^{T-1}x(t+\frac{1}{2}\tau)
+\end{equation} 
+\end{lem}
+
+We now give fast algorithms to compute the quantities:
+\begin{align}
+&\int\int (t-u) \phi(u,\nu) W_x(t-u,\omega - \nu)\; du\;d\nu \\
+&\int\int (\omega-\nu)\phi(u,\nu) W_x(t-u,\omega-\nu)\; du\;d\nu
+\end{align}
+based on the following theorem which is known in the literature \cite{auger95,cohen95} but
+we will find it useful to give a complete proof
+
+which are the two components of the numerators of the quantities in \autoref{continuous-wvd-mean-shift}.
+In the case where we are working with Gaussian window functions for $\phi(u,\nu)$
+the smoothed WVD is a spectrogram (or sum of spectrograms) so
+\begin{align*}
+&\int\int \nu \phi(u,\nu) W_x(t-u,\omega-\nu)\; du\;d\nu \\
+=& \int\int \nu \kappa \exp\left(-\frac{1}{2\alpha}u^2\right) \exp\left(-\frac{1}{2\beta}\nu^2\right) \int x(t-u+\frac{1}{2}\tau)x(t-u-\frac{1}{2}\tau)e^{-i\tau(\omega-\nu)}\;d\tau\; du\;d\nu\\
+=& \int \kappa\beta \exp\left(-\frac{1}{2\alpha}u^2\right) \int \frac{\nu}{\beta} \exp\left(-\frac{1}{2\beta}\nu^2\right) \int x(t-u+\frac{1}{2}\tau)x(t-u-\frac{1}{2}\tau)e^{-i\tau(\omega-\nu)}\;d\tau\;d\nu\; du
+\end{align*}
+The rest of the derivation uses the convolution theorem and the fact that Hermite functions are eigenfunctions
+of the Fourier transform.
+
+Given a signal $x(t)$ the general class of time-frequency representations (which includes the spectrogram among
+others) \cite{cohen95} may be
+written
+\begin{equation}
+C(t,\omega)
+\end{equation}
 
 \section{Reassignment Algorithms}
 
@@ -81,6 +351,47 @@ Usually the reassignment estimates are used to construct a reassigned time-frequ
 \begin{equation}
 R(t,f) = \int\int W(\tau,\omega) \delta(\tau-\hat{t}(t,f))\delta(\omega -\hat{f}(t,f))d\tau d\omega.
 \end{equation}
+
+\subsection{Discrete Mean Shift}
+
+Suppose we are given are a given a discrete signal $x(t)$ defined on $\mathbb{Z}$ but with support on $t=0,1,\ldots,T-1$  and we compute a discrete short-time Fourier transform
+$X(t,f; h)$ with window $h(t)$ with support $-N/2,1-N/2,\ldots,N/2-1$
+\begin{align}
+X(t,f; h) =& \sum_{\tau=-N/2}^{N/2-1} X(t+\tau)h(\tau)e^{- i 2\pi\frac{f}{N}(\tau + N/2)}\\
+=& \sum_{\tau=-N/2}^{N/2-1} X(t+\tau)h(\tau)e^{-i 2\pi\frac{f}{N} (\tau + N/2)}\\
+=& \sum_{\tau=-\infty}^{\infty} X(\tau)h(\tau-t)e^{-i 2\pi\frac{f}{N}(\tau-t + N/2)}
+\end{align}
+The spectrogram $|X(t,f; h)|^2=X(t,f; h)X^*(t,f;h)$ may then be written as
+\begin{align}
+X(t,f; h)X^*(t,f; h) =& \sum_{\tau=-\infty}^{\infty}\sum_{\tau'=-\infty}^{\infty} X(\tau)X(\tau')h(\tau-t)h(\tau'-t)e^{-i 2\pi\frac{f}{N}(\tau-\tau')}.
+\end{align}
+Then we have that
+\begin{equation}
+tX(t,f; h)X^*(t,f; h) =& \sum_{\tau=-\infty}^{\infty}\sum_{\tau'=-\infty}^{\infty} X(\tau)X(\tau')h(\tau-t)h(\tau'-t)e^{-i 2\pi\frac{f}{N}(\tau-\tau')}
+\end{equation}
+This means that each mean-shift step
+is
+\begin{align}
+\hat{t}(t,f) =& \frac{\sum_{u=-\infty}^\infty (t-u) |X(t-u,f;h)|^2}{ \sum_{u=-\infty}^\infty |X(t-u,f;h)|^2}\\
+ =& t- \frac{\sum_{u=-\infty}^\infty u \sum_{\tau=-N/2}^{N/2-1}\sum_{\tau'=-N/2}^{N/2-1} X((t-u)+\tau)X((t-u)+\tau')h(-\tau)h(-\tau')e^{-i 2\pi\frac{f}{N}(\tau-\tau')}}{\sum_{u=-\infty}^\infty \sum_{\tau=-N/2}^{N/2-1}\sum_{\tau'=-N/2}^{N/2-1} X((t-u)+\tau)X((t-u)+\tau')h(-\tau)h(-\tau')e^{-i 2\pi\frac{f}{N}(\tau-\tau')}}
+\end{align}
+
+\subsection{The Discrete Case}
+
+In practical work we have discrete time signals use discrete-time algorithms.
+A discrete time spectrogram $X$ with window $h$ is computed as
+\begin{align*}
+X(t,f; h) =& \frac{1}{2}\left|\sum_{\tau=-N/2}^{N/2-1} X(t-\tau)h(\tau)e^{i 2\pi\frac{f}{N}(\tau + N/2)}\right|^2\\
+=& \frac{1}{2}\left(\sum_{\tau=-N/2}^{N/2-1} X(t-\tau)h(\tau)e^{i 2\pi\frac{f}{N}(\tau + N/2)}\right)\left(\sum_{\tau=-N/2}^{N/2-1} X(t-\tau)h(\tau)e^{i 2\pi\frac{f}{N}(\tau + N/2)}\right)^*\\
+=&  \frac{1}{2}\sum_{\tau=-N/2}^{N/2-1}\sum_{\tau'=-N/2}^{N/2-1} X(t-\tau)X(t-\tau')h(\tau)h(\tau')e^{i 2\pi\frac{f}{N}(\tau -\tau')} \\
+=&  \sum_{k=0}^{N/2-1}\sum_{\tau=0}^k X(t-\frac{N}{2}+1+\frac{k}{2}-\tau)X(t-\frac{N}{2}+1+\frac{k}{2}-\tau)
+\end{align}
+which shows the relationship to the Wigner-Ville Distribution.
+
+\subsection{Discrete Mean Shift}
+
+We then show that 
+
 However, we propose to find the modes of the reassigned spectrogram, which are those points that are not mapped to other points.  Namely reassignment
 is essentialy just a function from the data to itself and we expect to find fixed points along ridges and on impulsive noise.  We present a summary of a basic fixed-point finding algorithm
 in \autoref{alg:basic-fixed-points}.

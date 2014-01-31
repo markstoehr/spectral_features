@@ -1,5 +1,19 @@
-%% LyX 2.0.2 created this file.  For more info, see http://www.lyx.org/.
-%% Do not edit unless you really know what you are doing.
+%% This file is part of spectral_features.
+
+%%     spectral_features is free software: you can redistribute it and/or modify
+%%     it under the terms of the GNU General Public License as published by
+%%     the Free Software Foundation, either version 3 of the License, or
+%%     (at your option) any later version.
+
+%%     spectral_features is distributed in the hope that it will be useful,
+%%     but WITHOUT ANY WARRANTY; without even the implied warranty of
+%%     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+%%     GNU General Public License for more details.
+
+%%     You should have received a copy of the GNU General Public License
+%%     along with spectral_features.  If not, see <http://www.gnu.org/licenses/>.
+
+
 \documentclass[english]{article}
 \usepackage[T1]{fontenc}
 \usepackage[latin9]{inputenc}
@@ -436,7 +450,16 @@ the spectrogram.  We extract axoids whose centerline has a
 constant binary phase feature activation.
 
 The patches have a length $L$ and a frequency span $\Omega$.
-We will keep those all the same.
+We will keep those all the same.  The main addition is that we only
+extract parts along the contours defined by the binary ridge features.
+Namely, given the list of formant point locations
+$\{(t_i,f_i)\}$ we extract patches
+\begin{equation}
+Q(t_i,f_i) = [t_i-T/2,f_i-\Omega/2] \times [t_i+T/2,f_i+\Omega/2] \cap \mathbb{Z}^2
+\end{equation}
+and then these $\mathcal{Q}=\{Q(t_i,f_i)\}_{i\in I}$ are used to train
+a product of Bernoullis finite mixture model which can be used in
+a parts-based coding step \cite{AmitBernstein}.
 
 
 \section{Designed Formant Parts}
